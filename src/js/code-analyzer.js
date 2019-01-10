@@ -24,14 +24,14 @@ const recBody = parsed => {
 let enterIf = true;
 let ifBool = {};
 const recIf = parsed => {
-    addToTable(parsed.loc.start.line,'If Statement',recParse(parsed.test),'');
-    recParse(parsed.consequent);
+    //addToTable(parsed.loc.start.line,'If Statement',recParse(parsed.test),'');
+    //recParse(parsed.consequent);
     isDirty = false;
     let test = recParse(parsed.test);
     isDirty = true;
-    replaceIfs[parsed.loc.start.line] = 'if('+test+'){';
+    replaceIfs[parsed.loc.start.line] = `if('${test}'){`;
 
-    let resultTest = eval(recParse(test));
+    let resultTest = eval(recParse(parsed.test));
     if(resultTest && enterIf)
     {
         ifBool[parsed.loc.start.line] = true;
@@ -46,7 +46,7 @@ const recIf = parsed => {
     otherDict = JSON.parse(JSON.stringify(tmp_clean));
     otherDictDirty = JSON.parse(JSON.stringify(tmp_dirty));
 
-    if(parsed.alternate != null)
+    if(parsed.alternate !== null)
         recParse(parsed.alternate);
     else
         enterIf = true;
@@ -68,15 +68,25 @@ const recFuncDec = funcParsed => {
 };
 
 const vDeclirator = vParsed => {
-    addToTable(vParsed.loc.start.line,'Variable Declarator',vParsed.id.name
-        ,recParse(vParsed.init));
+    // addToTable(vParsed.loc.start.line,'Variable Declarator',vParsed.id.name
+    //     ,recParse(vParsed.init));
+    isDirty = true;
+    otherDictDirty[vParsed.id.name] = recParse(vParsed.init);
+    isDirty = false;
+    otherDict[vParsed.id.name] = recParse(vParsed.init);
+
+    if(!(vParsed.id.name in funcArgDic))
+        deltLines.push(vParsed.loc.start.line);
+    return otherDict[vParsed.id.name];
 };
 
 const vDecliration = vParsed => {
-    for (let i = 0; i < vParsed.declarations.length; i++) {
+    let i = 0;
+    for (i = 0; i < vParsed.declarations.length; i++) {
         //the declarators
         recParse(vParsed.declarations[i]);
     }
+    return i;
 
 };
 
@@ -134,24 +144,30 @@ const retIdent = parsed => {
         else
             return otherDict[parsed.name];
 
-    if(!isDirty)
-        return funcArgDic[parsed.name];
+    if(isDirty)
+        return `funcArgDic["${parsed.name}"]`;
     return parsed.name;
 };
 
 const retLit = parsed => {return parsed.value;};
 
 function recWhile(parsed) {
-    addToTable(parsed.loc.start.line,'While Statement','',recParse(parsed.test));
+    //addToTable(parsed.loc.start.line,'While Statement','',recParse(parsed.test));
+    isDirty = false;
     recParse(parsed.body);
-    return [parsed.loc.start.line,'While Statement','',recParse(parsed.test)];
+    let st = recBin(parsed.test);
+    replaceIfs[parsed.loc.start.line] = `while(${st})`;
+    return st;
 }
 
 function recReturn(parsed) {
-    addToTable(parsed.loc.start.line,'Return Statement','',recParse(parsed.argument));
-    if(parsed.argument == null)
-        return [parsed.loc.start.line,'Return Statement','',''];
-    return [parsed.loc.start.line,'Return Statement','',recParse(parsed.argument)]; //for testing
+    //addToTable(parsed.loc.start.line,'Return Statement','',recParse(parsed.argument));
+    isDirty = false;
+    replaceIfs[parsed.loc.start.line] = `return ${recParse(parsed.argument)}`;
+    return replaceIfs[parsed.loc.start.line];
+    // if(parsed.argument == null)
+    //     return [parsed.loc.start.line,'Return Statement','',''];
+    // return [parsed.loc.start.line,'Return Statement','',recParse(parsed.argument)]; //for testing
 }
 
 function initEval(parsed, parameters) {
@@ -159,7 +175,7 @@ function initEval(parsed, parameters) {
     let check = '';
     for (let i = 0; i <body.length ; i++) {
         if(body[i].type === 'FunctionDeclaration') {
-            for (let j = 0; j < body[j].params.name[j] ; j++) {
+            for (let j = 0; j < body[i].params.length ; j++) {
                 funcArgDic[body[i].params[j].name] = parameters[j];
                 check += funcArgDic[body[i].params[j].name]=parameters[j];
             }
@@ -183,7 +199,7 @@ const recParse= (parsed, params = [1, 2, 3]) =>{
         {
             initEval(parsed, params);
             recBody(parsed);
-            return list;//the end
+            return [JSON.stringify(ifBool),JSON.stringify(replaceIfs),JSON.stringify(deltLines)];//the end
         }
         case 'BlockStatement':
             recBody(parsed);
@@ -221,7 +237,7 @@ const recParse= (parsed, params = [1, 2, 3]) =>{
         case 'ReturnStatement':
             return recReturn(parsed);
         default:
-            return 'error';
+            return parsed;
         }
     }
 };
